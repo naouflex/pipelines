@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  pipelines:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - MINIMUM_BUILD=false
+        - USE_CUDA=false
+        - USE_CUDA_VER=cpu
+    ports:
+      - "9099:9099"
+    volumes:
+      - .:/app
+    environment:
+      - ENV=prod
+      - HOST=0.0.0.0
+      - PORT=9099
+    restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
