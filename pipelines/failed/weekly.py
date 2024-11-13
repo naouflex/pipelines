@@ -12,10 +12,11 @@ from typing import List, Union, Generator, Iterator
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
 from langchain.hub import pull
-from langchain.agents import AgentExecutor
 from pipelines.web.base import create_structured_chat_agent
 from pipelines.web.toolkit import PlayWrightBrowserToolkit
 from pipelines.web.utils import create_async_playwright_browser
+import asyncio
+from functools import partial
 
 class Pipeline:
     """Weekly summary generation pipeline"""
@@ -84,6 +85,14 @@ class Pipeline:
             if body.get("title", False):
                 return "Weekly Summary Generator"
 
+            # Create a new event loop for async operations
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Initialize browser if not already initialized
+            if not self.browser or not self.toolkit:
+                loop.run_until_complete(self.init_browser())
+
             llm = ChatOpenAI(
                 model=self.valves.MODEL,
                 temperature=0,
@@ -124,6 +133,9 @@ class Pipeline:
         except Exception as e:
             print(f"Error generating weekly summary: {e}")
             return f"Error generating weekly summary: {e}"
+        finally:
+            # Clean up the event loop
+            loop.close()
 
     def _stream_response(self, agent_executor, prompt_request):
         for chunk in agent_executor.stream({"input": prompt_request}):

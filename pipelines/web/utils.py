@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING, Any, Coroutine, List, Optional, TypeVar
+import nest_asyncio
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser as AsyncBrowser
@@ -10,6 +11,8 @@ if TYPE_CHECKING:
     from playwright.sync_api import Browser as SyncBrowser
     from playwright.sync_api import Page as SyncPage
 
+# Apply nest_asyncio to allow nested event loops
+nest_asyncio.apply()
 
 async def aget_current_page(browser: AsyncBrowser) -> AsyncPage:
     """
@@ -50,7 +53,7 @@ def get_current_page(browser: SyncBrowser) -> SyncPage:
     return context.pages[-1]
 
 
-def create_async_playwright_browser(
+async def create_async_playwright_browser(
     headless: bool = True, args: Optional[List[str]] = None
 ) -> AsyncBrowser:
     """
@@ -65,8 +68,8 @@ def create_async_playwright_browser(
     """
     from playwright.async_api import async_playwright
 
-    browser = run_async(async_playwright().start())
-    return run_async(browser.chromium.launch(headless=headless, args=args))
+    playwright = await async_playwright().start()
+    return await playwright.chromium.launch(headless=headless, args=args)
 
 
 def create_sync_playwright_browser(
@@ -100,5 +103,10 @@ def run_async(coro: Coroutine[Any, Any, T]) -> T:
     Returns:
         T: The result of the coroutine.
     """
-    event_loop = asyncio.get_event_loop()
-    return event_loop.run_until_complete(coro)
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    return loop.run_until_complete(coro)
