@@ -17,6 +17,7 @@ from pipelines.web.tool.extract_text import ExtractTextTool
 from pipelines.web.tool.get_elements import GetElementsTool
 from pipelines.web.tool.navigate import NavigateTool
 from pipelines.web.tool.navigate_back import NavigateBackTool
+from pipelines.web.utils import create_async_playwright_browser, run_async
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser as AsyncBrowser
@@ -79,8 +80,16 @@ class PlayWrightBrowserToolkit(BaseToolkit):
         """Initialize async resources if needed."""
         if self.async_browser is None or not self.async_browser.contexts:
             try:
-                from pipelines.web.utils import create_async_playwright_browser
-                self.async_browser = await create_async_playwright_browser()
+                # Use run_async to ensure the browser is fully initialized
+                self.async_browser = await run_async(
+                    create_async_playwright_browser()
+                )
+                # Wait for the first context and page to be ready
+                if not self.async_browser.contexts:
+                    context = await run_async(
+                        self.async_browser.new_context()
+                    )
+                    await run_async(context.new_page())
             except Exception as e:
                 print(f"Error initializing browser: {e}")
                 raise
@@ -88,6 +97,10 @@ class PlayWrightBrowserToolkit(BaseToolkit):
     def get_tools(self) -> List[BaseTool]:
         """Get the tools in the toolkit."""
         try:
+            # Ensure browser is initialized before creating tools
+            if self.async_browser and not self.async_browser.contexts:
+                run_async(self.ainit())
+                
             tool_classes: List[Type[BaseBrowserTool]] = [
                 ClickTool,
                 NavigateTool,

@@ -5,18 +5,41 @@ import asyncio
 from typing import TYPE_CHECKING, Any, Coroutine, List, Optional, TypeVar
 import os
 import sys
+import platform
 
 # Set environment variables
 os.environ["LANGCHAIN_TRACING_V2"] = "false"
 os.environ["LANGCHAIN_TRACING"] = "false"
 os.environ["LANGCHAIN_API_KEY"] = "none"
 
-# Remove uvloop as it conflicts with nest_asyncio
-# import uvloop
-# asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
-import nest_asyncio
-nest_asyncio.apply()
+
+def configure_event_loop():
+    """Configure the event loop based on the platform and environment."""
+    try:
+        # Only try to use uvloop if nest_asyncio is not needed
+        if not any(name in sys.modules for name in ['jupyter', 'ipykernel', 'notebook']):
+            try:
+                import uvloop
+                uvloop.install()
+            except ImportError:
+                asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+        else:
+            # If we're in a Jupyter environment, prioritize nest_asyncio over uvloop
+            asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+            try:
+                import nest_asyncio
+                nest_asyncio.apply()
+            except ImportError:
+                print("Warning: nest_asyncio not available")
+                    
+    except Exception as e:
+        print(f"Warning: Error configuring event loop: {e}")
+        # Ensure we have a working event loop policy
+        asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+
+# Configure the event loop when the module is imported
+configure_event_loop()
 
 # Replace sqlite3 with pysqlite3 if needed
 try:
@@ -126,9 +149,14 @@ def get_or_create_event_loop():
     """Get the current event loop or create a new one."""
     try:
         loop = asyncio.get_event_loop()
+        if not loop.is_running():
+            return loop
     except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        pass
+    
+    # Create new loop if needed
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     return loop
 
 

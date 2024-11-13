@@ -4,7 +4,7 @@ author: open-webui
 version: 1.0
 license: MIT
 description: A pipeline for generating weekly summaries using LangChain and Playwright
-requirements: langchain-openai,playwright,python-dotenv,langchain-community
+requirements: langchain-openai,playwright,python-dotenv,langchain-community,lxml,bs4
 """
 
 import os
@@ -59,20 +59,22 @@ class Pipeline:
             List[dict]: The list of GPT models
         """
         return [
-            {"id": "gpt-4-turbo-preview", "name": "GPT-4 Turbo Preview"},
-            {"id": "gpt-4", "name": "GPT-4"},
+            {"id": "gpt-4-turbo", "name": "GPT-4 Turbo"},
             {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo"},
-            {"id": "gpt-4-0125-preview", "name": "GPT-4 0125 Preview"},
-            {"id": "gpt-4-1106-preview", "name": "GPT-4 1106 Preview"},
         ]
 
-    async def init_browser(self):
+    async def init_browser(self, force_new=False):
         """Initialize the browser and toolkit"""
         print("Initializing browser...")
         try:
             if self.browser:
+                if not force_new:
+                    print("Using existing browser instance")
+                    return True
                 print("Closing existing browser instance")
                 await self.browser.close()
+                self.browser = None
+                self.toolkit = None
             
             self.browser = await create_async_playwright_browser(headless=self.valves.HEADLESS)
             print("Browser created successfully")
@@ -87,15 +89,10 @@ class Pipeline:
     async def on_startup(self):
         """This function is called when the server is started."""
         print(f"on_startup:{__name__}")
-        await self.init_browser()
 
     async def on_shutdown(self):
         """This function is called when the server is stopped."""
         print(f"on_shutdown:{__name__}")
-        if self.browser:
-            await self.browser.close()
-            self.browser = None
-            self.toolkit = None
 
     async def on_valves_updated(self):
         """This function is called when the valves are updated."""
@@ -131,8 +128,10 @@ class Pipeline:
 
         async def generate_response():
             try:
-                print("Initializing browser...")
-                await self.init_browser()
+                print("Initializing new browser instance for this request...")
+                # Always create a new browser instance for each request
+                self.browser = await create_async_playwright_browser(headless=self.valves.HEADLESS)
+                self.toolkit = PlayWrightBrowserToolkit.from_browser(async_browser=self.browser)
                 
                 print("Setting up prompt and tools...")
                 prompt = pull("naouufel/structured-chat-agent")
@@ -155,25 +154,32 @@ class Pipeline:
                 Instructions: Produce a weekly article following those instructions\
                     1. Go to https://app.inverse.watch/public/dashboards/iVI1ZdCMMTOg2SwSWOpIKQGOfojXGQd8QDeisa25?org_slug=default&p_week={user_message} and wait 10 seconds for the page to load \
                     2. Use extract_text tool to extract the data from the page.\
-                    5. Get examples of articles at https://inverse.watch/weekly-2024-w01 and https://inverse.watch/weekly-2024-w45
+                    5. Get examples of articles at https://inverse.watch/weekly-2024-w44 and https://inverse.watch/weekly-2024-w45
                     6. Use extract_text tool to extract the data from the page and identify the sections and formats in those articles
                     7. Produce a summary for week {user_message} with the data you extracted in step 2 and 4.\
                     8. Make sure to adhere to the sections and format of the articles.
-                    9. Return your final answer as a string message formatted for discord.\
+                    9. Return your final answer as a message nicely formatted in Markdown.\
                 """
                 
-                print("Executing agent...")
-                response = await agent_executor.ainvoke(
-                    {
-                        "input": prompt_request,
-                        "chat_history": [],
-                    }
-                )
-                print("Agent execution completed")
-                
-                if isinstance(response, dict) and "output" in response:
-                    return response["output"]
-                return str(response)
+                if body.get("stream", False):
+                    final_response = ""
+                    async for chunk in agent_executor.astream(
+                        {
+                            "input": prompt_request,
+                            "chat_history": [],
+                        }
+                    ):
+                        if isinstance(chunk, dict) and "output" in chunk:
+                            final_response = str(chunk["output"])
+                    return self._process_response(final_response)
+                else:
+                    response = await agent_executor.ainvoke(
+                        {
+                            "input": prompt_request,
+                            "chat_history": [],
+                        }
+                    )
+                    return self._process_response(str(response.get("output", "")))
                 
             except Exception as e:
                 print(f"Error in generate_response: {str(e)}")
@@ -181,16 +187,19 @@ class Pipeline:
                 return f"Error: {str(e)}"
 
         try:
-            if body.get("stream", False):
-                async def stream_generator():
-                    result = await generate_response()
-                    for line in result.split('\n'):
-                        if line.strip():
-                            yield line + "\n"
-                return stream_generator()
-            else:
-                result = asyncio.run(generate_response())
+            # Temporarily disable uvloop
+            old_policy = asyncio.get_event_loop_policy()
+            asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+            
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(generate_response())
                 return result
+            finally:
+                loop.close()
+                # Restore the original event loop policy
+                asyncio.set_event_loop_policy(old_policy)
 
         except Exception as e:
             error_msg = f"Error in pipe execution: {str(e)}\n{traceback.format_exc()}"
@@ -221,3 +230,32 @@ class Pipeline:
             print(f"Error streaming response: {e}")
             print(traceback.format_exc())
             yield f"Error streaming response: {e}"
+
+    def _process_response(self, response: str) -> str:
+        """Process and clean the response."""
+        if not response:
+            return ""
+
+        # Split into lines and process
+        lines = response.split('\n')
+        processed_lines = []
+        
+        # Track if we're inside a code block
+        in_code_block = False
+        
+        for line in lines:
+            line = line.strip()
+            
+            # Skip empty lines and system messages
+            if not line or line.lower().startswith(('responded:', 'invoking:', '> entering', '> finished')):
+                continue
+            
+            # Handle code blocks
+            if line.startswith('```'):
+                in_code_block = not in_code_block
+                continue
+            
+            if not in_code_block:
+                processed_lines.append(line)
+        
+        return '\n'.join(processed_lines).strip()
