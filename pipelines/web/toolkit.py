@@ -75,25 +75,40 @@ class PlayWrightBrowserToolkit(BaseToolkit):
             raise ValueError("Either async_browser or sync_browser must be specified.")
         return values
 
+    async def ainit(self) -> None:
+        """Initialize async resources if needed."""
+        if self.async_browser is None or not self.async_browser.contexts:
+            try:
+                from pipelines.web.utils import create_async_playwright_browser
+                self.async_browser = await create_async_playwright_browser()
+            except Exception as e:
+                print(f"Error initializing browser: {e}")
+                raise
+
     def get_tools(self) -> List[BaseTool]:
         """Get the tools in the toolkit."""
-        tool_classes: List[Type[BaseBrowserTool]] = [
-            ClickTool,
-            NavigateTool,
-            NavigateBackTool,
-            ExtractTextTool,
-            ExtractHyperlinksTool,
-            GetElementsTool,
-            CurrentWebPageTool,
-        ]
+        try:
+            tool_classes: List[Type[BaseBrowserTool]] = [
+                ClickTool,
+                NavigateTool,
+                NavigateBackTool,
+                ExtractTextTool,
+                ExtractHyperlinksTool,
+                GetElementsTool,
+                CurrentWebPageTool,
+            ]
 
-        tools = [
-            tool_cls.from_browser(
-                sync_browser=self.sync_browser, async_browser=self.async_browser
-            )
-            for tool_cls in tool_classes
-        ]
-        return cast(List[BaseTool], tools)
+            tools = [
+                tool_cls.from_browser(
+                    sync_browser=self.sync_browser, 
+                    async_browser=self.async_browser
+                )
+                for tool_cls in tool_classes
+            ]
+            return cast(List[BaseTool], tools)
+        except Exception as e:
+            print(f"Error getting tools: {e}")
+            raise
 
     @classmethod
     def from_browser(

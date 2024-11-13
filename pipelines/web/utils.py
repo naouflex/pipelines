@@ -3,16 +3,33 @@ from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING, Any, Coroutine, List, Optional, TypeVar
+import os
+import sys
+
+# Set environment variables
+os.environ["LANGCHAIN_TRACING_V2"] = "false"
+os.environ["LANGCHAIN_TRACING"] = "false"
+os.environ["LANGCHAIN_API_KEY"] = "none"
+
+# Remove uvloop as it conflicts with nest_asyncio
+# import uvloop
+# asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
 import nest_asyncio
+nest_asyncio.apply()
+
+# Replace sqlite3 with pysqlite3 if needed
+try:
+    __import__('pysqlite3')
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except ImportError:
+    pass
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser as AsyncBrowser
     from playwright.async_api import Page as AsyncPage
     from playwright.sync_api import Browser as SyncBrowser
     from playwright.sync_api import Page as SyncPage
-
-# Apply nest_asyncio to allow nested event loops
-nest_asyncio.apply()
 
 async def aget_current_page(browser: AsyncBrowser) -> AsyncPage:
     """
@@ -67,9 +84,20 @@ async def create_async_playwright_browser(
         AsyncBrowser: The playwright browser.
     """
     from playwright.async_api import async_playwright
-
-    playwright = await async_playwright().start()
-    return await playwright.chromium.launch(headless=headless, args=args)
+    
+    try:
+        playwright = await async_playwright().start()
+        browser = await playwright.chromium.launch(
+            headless=headless, 
+            args=args or ['--no-sandbox']  # Add default args for better stability
+        )
+        # Create a default context and page
+        context = await browser.new_context()
+        await context.new_page()
+        return browser
+    except Exception as e:
+        print(f"Error creating browser: {e}")
+        raise
 
 
 def create_sync_playwright_browser(
@@ -94,6 +122,16 @@ def create_sync_playwright_browser(
 T = TypeVar("T")
 
 
+def get_or_create_event_loop():
+    """Get the current event loop or create a new one."""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop
+
+
 def run_async(coro: Coroutine[Any, Any, T]) -> T:
     """Run an async coroutine.
 
@@ -103,15 +141,5 @@ def run_async(coro: Coroutine[Any, Any, T]) -> T:
     Returns:
         T: The result of the coroutine.
     """
-    try:
-        # Try getting the running loop
-        loop = asyncio.get_running_loop()
-        if loop.is_running():
-            # Create a new loop if current one is running
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            return new_loop.run_until_complete(coro)
-    except RuntimeError:
-        # If no loop is running, create a new one
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(coro)
+    loop = get_or_create_event_loop()
+    return loop.run_until_complete(coro)

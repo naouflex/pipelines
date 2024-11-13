@@ -13,6 +13,8 @@ import gql
 from typing import Any, Dict, Optional
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.pydantic_v1 import Field
+from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnablePassthrough, RunnableSequence
 
 from langchain_community.agent_toolkits.base import BaseToolkit
 from langchain.callbacks.manager import (
@@ -81,7 +83,7 @@ class GraphQLCheckerTool(BaseGraphQLTool):
 
     template: str = GRAPHQL_QUERY_CHECKER
     llm: BaseLanguageModel
-    llm_chain: LLMChain = Field(init=False)
+    chain: RunnableSequence = Field(init=False)
     name: str = "graphql_query_syntax_checker"
     description: str = """
     Use this tool to double check if your query is correct before executing it.
@@ -89,33 +91,25 @@ class GraphQLCheckerTool(BaseGraphQLTool):
     """
 
     @root_validator(pre=True)
-    def initialize_llm_chain(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        if "llm_chain" not in values:
-            values["llm_chain"] = LLMChain(
-                llm=values.get("llm"),
-                prompt=PromptTemplate(
-                    template=GRAPHQL_QUERY_CHECKER, input_variables=["dialect", "query"]
-                ),
+    def initialize_chain(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        if "chain" not in values:
+            prompt = PromptTemplate(
+                template=GRAPHQL_QUERY_CHECKER,
+                input_variables=["dialect", "query"]
             )
-
-        if values["llm_chain"].prompt.input_variables != ["dialect", "query"]:
-            raise ValueError(
-                "LLM chain for QueryCheckerTool must have input variables ['query', 'dialect']"
-            )
+            values["chain"] = prompt | values.get("llm")
 
         return values
 
     def _run(
         self,
-
         query: str,
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the LLM to check the query."""
-        return self.llm_chain.predict(
-            query=query,
-            dialect='graphql',
-            callbacks=run_manager.get_child() if run_manager else None,
+        return self.chain.invoke(
+            {"query": query, "dialect": 'graphql'},
+            config={"callbacks": run_manager.get_child() if run_manager else None},
         )
 
     async def _arun(
@@ -123,10 +117,9 @@ class GraphQLCheckerTool(BaseGraphQLTool):
         query: str,
         run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
     ) -> str:
-        return await self.llm_chain.apredict(
-            query=query,
-            dialect='graphql',
-            callbacks=run_manager.get_child() if run_manager else None,
+        return await self.chain.arun(
+            {"query": query, "dialect": 'graphql'},
+            config={"callbacks": run_manager.get_child() if run_manager else None},
         )
 
 class QueryGraphQLTool(BaseGraphQLTool):
@@ -154,36 +147,29 @@ class OutputFormatTool(BaseGraphQLTool):
     """Tool to format the final answer."""
     
     llm: BaseLanguageModel
-    llm_chain: LLMChain = Field(init=False)
+    chain: RunnableSequence = Field(init=False)
     name: str = "graphql_format_answer"
     description: str = """
     Input is an answer, output is the final answer with formatted numbers and timestamps as a string.
     Always use this tool at the very end.
     """
     @root_validator(pre=True)
-    def initialize_llm_chain(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        if "llm_chain" not in values:
-            values["llm_chain"] = LLMChain(
-                llm=values.get("llm"),
-                prompt=PromptTemplate(
-                    template="""
-                            {query}
-                            - Convert prices to human readable format.
-                            - Add etherscan link for transactions.
-                            - Give prices in USD
-                            - Format numbers to accounting string when appropriate.
-                            - Format dates to human readable format when appropriate.
-                            - Convert timestamps to human readable format when appropriate.
-                            - Start block and end block are not timestamps so do not convert them.
-                            Final Answer:
-                            """, input_variables=["query"]
-                ),
+    def initialize_chain(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        if "chain" not in values:
+            prompt = PromptTemplate(
+                template="""
+                        {query}
+                        - Convert prices to human readable format.
+                        - Add etherscan link for transactions.
+                        - Give prices in USD
+                        - Format numbers to accounting string when appropriate.
+                        - Format dates to human readable format when appropriate.
+                        - Convert timestamps to human readable format when appropriate.
+                        - Start block and end block are not timestamps so do not convert them.
+                        Final Answer:
+                        """, input_variables=["query"]
             )
-
-        if values["llm_chain"].prompt.input_variables != ["query"]:
-            raise ValueError(
-                "LLM chain for QueryCheckerTool must have input variables ['query']"
-            )
+            values["chain"] = prompt | values.get("llm")
 
         return values
 
@@ -193,10 +179,9 @@ class OutputFormatTool(BaseGraphQLTool):
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the LLM to format your final answer."""
-        return self.llm_chain.predict(
-            query=query,
-            dialect='graphql',
-            callbacks=run_manager.get_child() if run_manager else None,
+        return self.chain.invoke(
+            {"query": query, "dialect": 'graphql'},
+            config={"callbacks": run_manager.get_child() if run_manager else None},
         )
 
     async def _arun(
@@ -204,10 +189,9 @@ class OutputFormatTool(BaseGraphQLTool):
         query: str,
         run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
     ) -> str:
-        return await self.llm_chain.apredict(
-            query=query,
-            dialect='graphql',
-            callbacks=run_manager.get_child() if run_manager else None,
+        return await self.chain.arun(
+            {"query": query, "dialect": 'graphql'},
+            config={"callbacks": run_manager.get_child() if run_manager else None},
         )
 
     

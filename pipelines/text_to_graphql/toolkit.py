@@ -7,7 +7,7 @@ from langchain_core.pydantic_v1 import Field
 from langchain_community.agent_toolkits.base import BaseToolkit
 from typing import List
 
-from tool import (
+from pipelines.text_to_graphql.tool import (
     GraphQLCheckerTool,
     GetAddressLinkTool,
     GetBlockLinkTool,
