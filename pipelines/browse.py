@@ -144,7 +144,7 @@ class Pipeline:
                     2. Devise an action plan to fulfill the request using a search engine, navigate to the relevant pages and extract the relevant information.
                     3. Execute the action plan until the request is fulfilled.
                     4. If another action plan is necessary to provide a more detailed answer, go back to step 1.
-                    5. Always include the relevant link(s) to the page(s) you found in your answer.
+                    5. Always include the complete, accurate, and relevant link(s) to the page(s) you found in your answer.
                     6. Return your final answer as a message nicely formatted in Markdown.
                     
                 Request: {user_message}
