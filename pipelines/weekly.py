@@ -16,6 +16,7 @@ from langchain.agents import AgentExecutor
 from pipelines.web.base import create_structured_chat_agent
 from pipelines.web.toolkit import PlayWrightBrowserToolkit
 from pipelines.web.utils import create_async_playwright_browser
+import traceback
 
 class Pipeline:
     """Weekly summary generation pipeline"""
@@ -27,11 +28,16 @@ class Pipeline:
         HEADLESS: bool = os.getenv("HEADLESS", "true").lower() == "true"
 
     def __init__(self):
-        self.type = "manifold"
         self.name = "Weekly Summary Generator"
         self.browser = None
         self.toolkit = None
-        self.valves = self.Valves()
+        self.valves = self.Valves(
+            **{
+                "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", "your-openai-api-key-here"),
+                "MODEL": os.getenv("MODEL", "gpt-4-turbo"),
+                "HEADLESS": os.getenv("HEADLESS", "true").lower() == "true"
+            }
+        )
         self.pipelines = self.get_models()
 
     def get_models(self):
@@ -44,19 +50,49 @@ class Pipeline:
     async def init_browser(self):
         """Initialize the browser and toolkit"""
         try:
+            # Now create the browser
+            print("Creating browser...")
+            self.browser = await create_async_playwright_browser(headless=self.valves.HEADLESS)
             if self.browser:
                 await self.browser.close()
             
             self.browser = await create_async_playwright_browser(headless=self.valves.HEADLESS)
             self.toolkit = PlayWrightBrowserToolkit.from_browser(async_browser=self.browser)
+            print("Browser initialized successfully")
             return True
         except Exception as e:
             print(f"Error initializing browser: {e}")
+            traceback.print_exc()
             return False
 
     async def on_startup(self) -> None:
         """This function is called when the server is started."""
         print(f"on_startup:{__name__}")
+        
+        # Install playwright browsers if not already installed
+        import subprocess
+        import sys
+        
+        try:
+            print("Installing Playwright browsers...")
+            subprocess.run(
+                [sys.executable, "-m", "playwright", "install", "chromium"],
+                check=True,
+                capture_output=True
+            )
+            print("Installing Playwright dependencies...")
+            subprocess.run(
+                [sys.executable, "-m", "playwright", "install-deps"],
+                check=True,
+                capture_output=True
+            )
+            print("Playwright installation completed successfully")
+        except subprocess.CalledProcessError as e:
+            print(f"Error installing playwright: {e.stderr.decode()}")
+            traceback.print_exc()
+            return
+        
+        # Initialize browser after installation
         await self.init_browser()
 
     async def on_shutdown(self):
@@ -123,6 +159,7 @@ class Pipeline:
 
         except Exception as e:
             print(f"Error generating weekly summary: {e}")
+            traceback.print_exc()
             return f"Error generating weekly summary: {e}"
 
     def _stream_response(self, agent_executor, prompt_request):

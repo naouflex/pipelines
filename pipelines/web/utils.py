@@ -50,7 +50,7 @@ def get_current_page(browser: SyncBrowser) -> SyncPage:
     return context.pages[-1]
 
 
-def create_async_playwright_browser(
+async def create_async_playwright_browser(
     headless: bool = True, args: Optional[List[str]] = None
 ) -> AsyncBrowser:
     """
@@ -65,8 +65,8 @@ def create_async_playwright_browser(
     """
     from playwright.async_api import async_playwright
 
-    browser = run_async(async_playwright().start())
-    return run_async(browser.chromium.launch(headless=headless, args=args))
+    playwright = await async_playwright().start()
+    return await playwright.chromium.launch(headless=headless, args=args)
 
 
 def create_sync_playwright_browser(
@@ -100,5 +100,15 @@ def run_async(coro: Coroutine[Any, Any, T]) -> T:
     Returns:
         T: The result of the coroutine.
     """
-    event_loop = asyncio.get_event_loop()
-    return event_loop.run_until_complete(coro)
+    try:
+        # Try getting the running loop
+        loop = asyncio.get_running_loop()
+        if loop.is_running():
+            # Create a new loop if current one is running
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            return new_loop.run_until_complete(coro)
+    except RuntimeError:
+        # If no loop is running, create a new one
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(coro)
