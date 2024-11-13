@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING, Any, Coroutine, List, Optional, TypeVar
+import nest_asyncio
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser as AsyncBrowser
@@ -10,6 +11,8 @@ if TYPE_CHECKING:
     from playwright.sync_api import Browser as SyncBrowser
     from playwright.sync_api import Page as SyncPage
 
+# Apply nest_asyncio to allow nested event loops
+nest_asyncio.apply()
 
 async def aget_current_page(browser: AsyncBrowser) -> AsyncPage:
     """
