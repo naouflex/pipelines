@@ -29,6 +29,16 @@ class Pipeline:
         OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "your-openai-api-key-here")
         MODEL: str = os.getenv("MODEL", "gpt-4-turbo")
         HEADLESS: bool = os.getenv("HEADLESS", "true").lower() == "true"
+        PROMPT_REQUEST: str = os.getenv("PROMPT_REQUEST", """
+            Instructions: Produce a weekly article following those instructions\
+                1. Go to https://app.inverse.watch/public/dashboards/iVI1ZdCMMTOg2SwSWOpIKQGOfojXGQd8QDeisa25?org_slug=default&p_week={week} and wait 10 seconds for the page to load \
+                2. Use extract_text tool to extract the data from the page.\
+                5. Get examples of articles at https://inverse.watch/weekly-2024-w44 and https://inverse.watch/weekly-2024-w45
+                6. Use extract_text tool to extract the data from the page and identify the sections and formats in those articles
+                7. Produce a summary for week {week} with the data you extracted in step 2 and 4.\
+                8. Make sure to adhere to the sections and format of the articles.
+                9. Return your final answer as a message nicely formatted in Markdown.\
+            """)
 
     def __init__(self):
         print("Initializing Pipeline...")
@@ -150,16 +160,7 @@ class Pipeline:
                     max_iterations=20,
                 )
                 
-                prompt_request = f"""
-                Instructions: Produce a weekly article following those instructions\
-                    1. Go to https://app.inverse.watch/public/dashboards/iVI1ZdCMMTOg2SwSWOpIKQGOfojXGQd8QDeisa25?org_slug=default&p_week={user_message} and wait 10 seconds for the page to load \
-                    2. Use extract_text tool to extract the data from the page.\
-                    5. Get examples of articles at https://inverse.watch/weekly-2024-w44 and https://inverse.watch/weekly-2024-w45
-                    6. Use extract_text tool to extract the data from the page and identify the sections and formats in those articles
-                    7. Produce a summary for week {user_message} with the data you extracted in step 2 and 4.\
-                    8. Make sure to adhere to the sections and format of the articles.
-                    9. Return your final answer as a message nicely formatted in Markdown.\
-                """
+                prompt_request = self.valves.PROMPT_REQUEST.format(week=user_message)
                 
                 if body.get("stream", False):
                     final_response = ""

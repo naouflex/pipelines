@@ -27,6 +27,18 @@ class Pipeline:
         OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "your-openai-api-key-here")
         MODEL: str = os.getenv("MODEL", "gpt-4-turbo")
         HEADLESS: bool = os.getenv("HEADLESS", "true").lower() == "true"
+        PROMPT_REQUEST: str = os.getenv("PROMPT_REQUEST", """
+                Instructions:
+                    0. If the request is not clear, return and ask the user for clarification, otherwise go to step 1.
+                    1. Navigate to the google webpage corresponding to the country of the request language.
+                    2. Devise an action plan to fulfill the request using a search engine, navigate to the relevant pages and extract the relevant information.
+                    3. Execute the action plan until the request is fulfilled.
+                    4. If another action plan is necessary to provide a more detailed answer, go back to step 1.
+                    5. Always include the complete, accurate, and relevant link(s) to the page(s) you found in your answer.
+                    6. Return your final answer as a message nicely formatted in Markdown.
+                    
+                Request: {user_message}
+                """)
 
     def __init__(self):
         print("Initializing Pipeline...")
@@ -137,18 +149,7 @@ class Pipeline:
                     max_iterations=50,
                 )
                 
-                prompt_request = f"""
-                Instructions:
-                    0. If the request is not clear, return and ask the user for clarification, otherwise go to step 1.
-                    1. Navigate to the google webpage corresponding to the country of the request language.
-                    2. Devise an action plan to fulfill the request using a search engine, navigate to the relevant pages and extract the relevant information.
-                    3. Execute the action plan until the request is fulfilled.
-                    4. If another action plan is necessary to provide a more detailed answer, go back to step 1.
-                    5. Always include the complete, accurate, and relevant link(s) to the page(s) you found in your answer.
-                    6. Return your final answer as a message nicely formatted in Markdown.
-                    
-                Request: {user_message}
-                """
+                prompt_request = self.valves.PROMPT_REQUEST.format(user_message=user_message)
                 
                 if body.get("stream", False):
                     final_response = ""

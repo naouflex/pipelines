@@ -18,6 +18,9 @@ class Pipeline:
         IMAGE_SIZE: str = "1792x1024"
         NUM_IMAGES: int = 1
         PROMPT_MODEL: str = "gpt-4-turbo"  # Model to use for prompt generation
+        SYSTEM_PROMPT: str = """You are an expert at writing prompts for DALL-E image generation. 
+            Convert the user's request and conversation context into a detailed, vivid prompt that will produce the best possible image.
+            Focus on visual details, style, lighting, and composition. Return only the prompt text, without any explanations."""
 
     def __init__(self):
         self.type = "manifold"
@@ -71,14 +74,10 @@ class Pipeline:
     def generate_optimized_prompt(self, context: str, user_message: str) -> str:
         """Generate an optimized image prompt using an LLM"""
         try:
-            system_prompt = """You are an expert at writing prompts for DALL-E image generation. 
-            Convert the user's request and conversation context into a detailed, vivid prompt that will produce the best possible image.
-            Focus on visual details, style, lighting, and composition. Return only the prompt text, without any explanations."""
-
             response = self.client.chat.completions.create(
                 model=self.valves.PROMPT_MODEL,
                 messages=[
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": self.valves.SYSTEM_PROMPT},
                     {"role": "user", "content": f"Context:\n{context}\nUser Request: {user_message}"}
                 ],
                 temperature=0.7,
