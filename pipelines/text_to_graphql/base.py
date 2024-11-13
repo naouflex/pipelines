@@ -12,14 +12,14 @@ from langchain_core.prompts.chat import (
     MessagesPlaceholder,
 )
 
-from prompt import (
+from pipelines.text_to_graphql.prompt import (
     GRAPHQL_FUNCTIONS_SUFFIX,
     GRAPHQL_PREFIX,
     GRAPHQL_SUFFIX,
 )
 from langchain_community.tools import BaseTool
 
-from toolkit import GraphQLDatabaseToolkit
+from pipelines.text_to_graphql.toolkit import GraphQLDatabaseToolkit
 
 if TYPE_CHECKING:
     from langchain.agents.agent import AgentExecutor

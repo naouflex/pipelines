@@ -5,8 +5,8 @@ from typing import Any, Optional
 import requests
 from langchain.callbacks.manager import CallbackManagerForToolRun
 from langchain.tools.base import BaseTool
-from wrapper import GraphQLAPIWrapper
-from prompt import GRAPHQL_QUERY_CHECKER
+from pipelines.text_to_graphql.wrapper import GraphQLAPIWrapper
+from pipelines.text_to_graphql.prompt import GRAPHQL_QUERY_CHECKER
 from langchain.chains.llm import LLMChain
 from langchain.prompts import PromptTemplate
 import gql

@@ -10,13 +10,13 @@ from langchain_community.tools.playwright.base import (
     BaseBrowserTool,
     lazy_import_playwright_browsers,
 )
-from web.tool.click import ClickTool
-from web.tool.current_page import CurrentWebPageTool
-from web.tool.extract_hyperlinks import ExtractHyperlinksTool
-from web.tool.extract_text import ExtractTextTool
-from web.tool.get_elements import GetElementsTool
-from web.tool.navigate import NavigateTool
-from web.tool.navigate_back import NavigateBackTool
+from pipelines.web.tool.click import ClickTool
+from pipelines.web.tool.current_page import CurrentWebPageTool
+from pipelines.web.tool.extract_hyperlinks import ExtractHyperlinksTool
+from pipelines.web.tool.extract_text import ExtractTextTool
+from pipelines.web.tool.get_elements import GetElementsTool
+from pipelines.web.tool.navigate import NavigateTool
+from pipelines.web.tool.navigate_back import NavigateBackTool
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser as AsyncBrowser
