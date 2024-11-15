@@ -13,14 +13,55 @@ from pydantic import BaseModel
 from sqlalchemy import create_engine
 from langchain_openai import ChatOpenAI
 from langchain_community.utilities import SQLDatabase
-from pipelines.text_to_sql.base import create_sql_agent
-from pipelines.text_to_sql.toolkit import SQLDatabaseToolkit
+from pipelines.sql_analyst_tools.base import create_sql_agent
+from pipelines.sql_analyst_tools.toolkit import SQLDatabaseToolkit
+
 
 class Pipeline:
     class Valves(BaseModel):
         DB_CONNECTION_STRING: str = "postgresql://user:pass@localhost:5432/db"
         OPENAI_API_KEY: str = ""
         MODEL: str = "gpt-4-turbo"
+
+        # SQL Prompts
+        PROMPT_SQL_PREFIX: str = """You are an agent designed to interact with a SQL database.
+Given an input question, create a syntactically correct {dialect} query to run, then look at the results of the query and return the answer.
+Unless the user specifies a specific number of examples they wish to obtain, always limit your query to at most {top_k} results.
+You can order the results by a relevant column to return the most interesting examples in the database.
+Never query for all the columns from a specific table, only ask for the relevant columns given the question.
+You have access to tools for interacting with the database.
+Only use the below tools. Only use the information returned by the below tools to construct your final answer.
+You MUST double check your query before executing it. If you get an error while executing a query, rewrite the query and try again.
+
+DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database.
+
+If the question does not seem related to the database, just return "I don't know" as the answer."""
+
+        PROMPT_SQL_SUFFIX: str = """Begin!
+
+Question: {input}
+Thought: I should look at the tables in the database to see what I can query.  Then I should query the schema of the most relevant tables.
+{agent_scratchpad}"""
+
+        PROMPT_SQL_FUNCTIONS_SUFFIX: str = """I should look at the tables in the database to see what I can query.  Then I should query the schema of the most relevant tables."""
+
+        PROMPT_QUERY_CHECKER: str = """{query}
+Double check the {dialect} query above for common mistakes, including:
+- Using NOT IN with NULL values
+- Using UNION when UNION ALL should have been used
+- Using BETWEEN for exclusive ranges
+- Data type mismatch in predicates
+- Properly quoting identifiers
+- Using the correct number of arguments for functions
+- Casting to the correct data type
+- Using the proper columns for joins
+
+If there are any of the above mistakes, rewrite the query. If there are no mistakes, just reproduce the original query.
+
+Output the final SQL query only.
+
+SQL Query: """
+    MAX_ITERATIONS: int = 10
 
     def __init__(self):
         self.name = "Inverse Stats DB Agent"
@@ -30,7 +71,7 @@ class Pipeline:
             **{
                 "DB_CONNECTION_STRING": os.getenv("DB_CONNECTION_STRING", "postgresql://user:pass@localhost:5432/db"),
                 "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", "your-openai-api-key-here"),
-                "MODEL": os.getenv("MODEL", "gpt-4-turbo")
+                "MODEL": os.getenv("MODEL", "gpt-4-turbo"),
             }
         )
         self.init_db_connection()
@@ -72,14 +113,15 @@ class Pipeline:
         )
 
         db = SQLDatabase(self.engine)
-        
+
         toolkit = SQLDatabaseToolkit(db=db, llm=llm)
         agent_executor = create_sql_agent(
             llm=llm,
             toolkit=toolkit,
+            valves=self.valves,
             verbose=True,
             agent_type="openai-functions",
-            max_iterations=10,
+            max_iterations=self.MAX_ITERATIONS,
             handle_parsing_errors=True
         )
 
@@ -128,36 +170,36 @@ class Pipeline:
         # Split into lines and process
         lines = response.split('\n')
         processed_lines = []
-        
+
         # Track if we're inside a code block or JSON block
         in_code_block = False
         json_content = []
-        
+
         for line in lines:
             line = line.strip()
-            
+
             # Skip empty lines and system messages
             if not line or line.lower().startswith(('responded:', 'invoking:', '> entering', '> finished')):
                 continue
-                
+
             # Handle JSON content
             if line.startswith('{') and line.endswith('}'):
                 json_content.append(line)
                 continue
-                
+
             # Handle code blocks
             if line.startswith('```'):
                 in_code_block = not in_code_block
                 continue
-                
+
             if not in_code_block:
                 processed_lines.append(line)
-        
+
         # Combine processed lines
         result = '\n'.join(processed_lines)
-        
+
         # Add JSON content at the end if present
         if json_content:
             result += '\n\n' + '\n'.join(json_content)
-            
+
         return result.strip()

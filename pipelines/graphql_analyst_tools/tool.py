@@ -5,8 +5,7 @@ from typing import Any, Optional
 import requests
 from langchain.callbacks.manager import CallbackManagerForToolRun
 from langchain.tools.base import BaseTool
-from pipelines.text_to_graphql.wrapper import GraphQLAPIWrapper
-from pipelines.text_to_graphql.prompt import GRAPHQL_QUERY_CHECKER
+from pipelines.graphql_analyst_tools.wrapper import GraphQLAPIWrapper
 from langchain.chains.llm import LLMChain
 from langchain.prompts import PromptTemplate
 import gql
@@ -81,7 +80,7 @@ class SchemaGraphQLTool(BaseGraphQLTool):
 class GraphQLCheckerTool(BaseGraphQLTool):
     """Use an LLM to check if a query is correct"""
 
-    template: str = GRAPHQL_QUERY_CHECKER
+    valves: Any
     llm: BaseLanguageModel
     chain: RunnableSequence = Field(init=False)
     name: str = "graphql_query_syntax_checker"
@@ -94,7 +93,7 @@ class GraphQLCheckerTool(BaseGraphQLTool):
     def initialize_chain(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         if "chain" not in values:
             prompt = PromptTemplate(
-                template=GRAPHQL_QUERY_CHECKER,
+                template=values["valves"].PROMPT_GRAPHQL_QUERY_CHECKER,
                 input_variables=["dialect", "query"]
             )
             values["chain"] = prompt | values.get("llm")

@@ -1,13 +1,13 @@
 from langchain.pydantic_v1 import Field
 from langchain.tools.base import BaseTool
-from pipelines.text_to_graphql.wrapper import GraphQLAPIWrapper
+from pipelines.graphql_analyst_tools.wrapper import GraphQLAPIWrapper
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.pydantic_v1 import Field
 
 from langchain_community.agent_toolkits.base import BaseToolkit
 from typing import List
 
-from pipelines.text_to_graphql.tool import (
+from pipelines.graphql_analyst_tools.tool import (
     GraphQLCheckerTool,
     GetAddressLinkTool,
     GetBlockLinkTool,

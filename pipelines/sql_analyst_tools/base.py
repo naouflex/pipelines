@@ -12,11 +12,6 @@ from langchain_core.prompts.chat import (
     MessagesPlaceholder,
 )
 
-from langchain_community.agent_toolkits.sql.prompt import (
-    SQL_FUNCTIONS_SUFFIX,
-    SQL_PREFIX,
-    SQL_SUFFIX,
-)
 from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 from langchain_community.tools import BaseTool
 
@@ -27,11 +22,9 @@ if TYPE_CHECKING:
 def create_sql_agent(
     llm: BaseLanguageModel,
     toolkit: SQLDatabaseToolkit,
+    valves: Any,
     agent_type: Optional[AgentType] = None,
     callback_manager: Optional[BaseCallbackManager] = None,
-    prefix: str = SQL_PREFIX,
-    suffix: Optional[str] = None,
-    format_instructions: Optional[str] = None,
     input_variables: Optional[List[str]] = None,
     top_k: int = 10,
     max_iterations: Optional[int] = 15,
@@ -52,36 +45,15 @@ def create_sql_agent(
     agent_type = agent_type or AgentType.ZERO_SHOT_REACT_DESCRIPTION
     tools = toolkit.get_tools() + list(extra_tools)
     
-    # Enhanced system prompt
-    enhanced_prefix = """You are an AI SQL expert. Your primary task is to help users query a SQL database.
-    When asked about the database, you should:
-    1. First, check available tables using sql_db_list_tables
-    2. Then, examine relevant table schemas using sql_db_schema
-    3. Finally, construct and execute appropriate SQL queries using sql_db_query
-
-    If you don't understand a query or can't convert it to SQL:
-    - Ask for clarification about specific parts you don't understand
-    - Suggest how the user might rephrase their question
-    - Explain what information you need to create a proper SQL query
-
-    The database dialect is {dialect}. When using sql_db_query, format the output to show the top {top_k} results by default.
-    """
-    
-    prefix = enhanced_prefix.format(dialect=toolkit.dialect, top_k=top_k)
+    prefix = valves.PROMPT_SQL_PREFIX.format(dialect=toolkit.dialect, top_k=top_k)
     agent: BaseSingleActionAgent
 
     if agent_type == AgentType.ZERO_SHOT_REACT_DESCRIPTION:
-        prompt_params = (
-            {"format_instructions": format_instructions}
-            if format_instructions is not None
-            else {}
-        )
         prompt = ZeroShotAgent.create_prompt(
             tools,
             prefix=prefix,
-            suffix=suffix or SQL_SUFFIX,
+            suffix=valves.PROMPT_SQL_SUFFIX,
             input_variables=input_variables,
-            **prompt_params,
         )
         llm_chain = LLMChain(
             llm=llm,
@@ -95,7 +67,7 @@ def create_sql_agent(
         messages = [
             SystemMessage(content=prefix),
             HumanMessagePromptTemplate.from_template("{input}"),
-            AIMessage(content=suffix or SQL_FUNCTIONS_SUFFIX),
+            AIMessage(content=valves.PROMPT_SQL_FUNCTIONS_SUFFIX),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
         ]
         input_variables = ["input", "agent_scratchpad"]

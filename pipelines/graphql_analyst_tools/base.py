@@ -12,14 +12,9 @@ from langchain_core.prompts.chat import (
     MessagesPlaceholder,
 )
 
-from pipelines.text_to_graphql.prompt import (
-    GRAPHQL_FUNCTIONS_SUFFIX,
-    GRAPHQL_PREFIX,
-    GRAPHQL_SUFFIX,
-)
 from langchain_community.tools import BaseTool
 
-from pipelines.text_to_graphql.toolkit import GraphQLDatabaseToolkit
+from pipelines.graphql_analyst_tools.toolkit import GraphQLDatabaseToolkit
 
 if TYPE_CHECKING:
     from langchain.agents.agent import AgentExecutor
@@ -30,11 +25,9 @@ if TYPE_CHECKING:
 def create_graphql_agent(
     llm: BaseLanguageModel,
     toolkit: GraphQLDatabaseToolkit,
+    valves: Any,
     agent_type: Optional[AgentType] = None,
     callback_manager: Optional[BaseCallbackManager] = None,
-    prefix: str = GRAPHQL_PREFIX,
-    suffix: Optional[str] = None,
-    format_instructions: Optional[str] = None,
     input_variables: Optional[List[str]] = None,
     top_k: int = 10,
     max_iterations: Optional[int] = 15,
@@ -54,21 +47,16 @@ def create_graphql_agent(
 
     agent_type = agent_type or AgentType.ZERO_SHOT_REACT_DESCRIPTION
     tools = toolkit.get_tools() + list(extra_tools)
-    prefix = prefix.format(dialect=toolkit.dialect, top_k=top_k)
+    
+    prefix = valves.PROMPT_GRAPHQL_PREFIX.format(dialect=toolkit.dialect, top_k=top_k)
     agent: BaseSingleActionAgent
 
     if agent_type == AgentType.ZERO_SHOT_REACT_DESCRIPTION:
-        prompt_params = (
-            {"format_instructions": format_instructions}
-            if format_instructions is not None
-            else {}
-        )
         prompt = ZeroShotAgent.create_prompt(
             tools,
             prefix=prefix,
-            suffix=suffix or GRAPHQL_SUFFIX,
+            suffix=valves.PROMPT_GRAPHQL_SUFFIX,
             input_variables=input_variables,
-            **prompt_params,
         )
         llm_chain = LLMChain(
             llm=llm,
@@ -82,7 +70,7 @@ def create_graphql_agent(
         messages = [
             SystemMessage(content=prefix),
             HumanMessagePromptTemplate.from_template("{input}"),
-            AIMessage(content=suffix or GRAPHQL_FUNCTIONS_SUFFIX),
+            AIMessage(content=valves.PROMPT_GRAPHQL_FUNCTIONS_SUFFIX),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
         ]
         input_variables = ["input", "agent_scratchpad"]

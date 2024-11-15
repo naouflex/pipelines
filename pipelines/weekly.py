@@ -13,9 +13,9 @@ from typing import List, Union, Generator, Iterator
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
 from langchain.hub import pull
-from pipelines.web.base import create_structured_chat_agent
-from pipelines.web.toolkit import PlayWrightBrowserToolkit
-from pipelines.web.utils import create_async_playwright_browser
+from pipelines.browse_tools.base import create_structured_chat_agent
+from pipelines.browse_tools.toolkit import PlayWrightBrowserToolkit
+from pipelines.browse_tools.utils import create_async_playwright_browser
 import asyncio
 from functools import partial
 from langchain.agents import AgentExecutor

@@ -12,9 +12,9 @@ from typing import List, Union, Generator, Iterator
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
 from langchain.hub import pull
-from pipelines.web.base import create_structured_chat_agent
-from pipelines.web.toolkit import PlayWrightBrowserToolkit
-from pipelines.web.utils import create_async_playwright_browser
+from pipelines.browse_tools.base import create_structured_chat_agent
+from pipelines.browse_tools.toolkit import PlayWrightBrowserToolkit
+from pipelines.browse_tools.utils import create_async_playwright_browser
 import asyncio
 from langchain.agents import AgentExecutor
 import logging
@@ -28,18 +28,91 @@ class Pipeline:
         MODEL: str = os.getenv("MODEL", "gpt-4-turbo")
         HEADLESS: bool = os.getenv("HEADLESS", "true").lower() == "true"
         PROMPT_REQUEST: str = os.getenv("PROMPT_REQUEST", """
-                Instructions:
-                    0. If the request is not clear, return and ask the user for clarification, otherwise go to step 1.
-                    1. Navigate to the google webpage corresponding to the country of the request language.
-                    2. Devise an action plan to fulfill the request using a search engine, navigate to the relevant pages and extract the relevant information.
-                    3. Execute the action plan until the request is fulfilled.
-                    4. If another action plan is necessary to provide a more detailed answer, go back to step 1.
-                    5. Always include the complete, accurate, and relevant link(s) to the page(s) you found in your answer.
-                    6. Return your final answer as a message nicely formatted in Markdown.
-                    
-                Request: {user_message}
-                """)
+Instructions:
+    0. If the request is not clear, return and ask the user for clarification, otherwise go to step 1.
+    1. Navigate to the google webpage corresponding to the country of the request language.
+    2. Devise an action plan to fulfill the request using a search engine, navigate to the relevant pages and extract the relevant information.
+    3. Execute the action plan until the request is fulfilled.
+    4. If another action plan is necessary to provide a more detailed answer, go back to step 1.
+    5. Always include the complete, accurate, and relevant link(s) to the page(s) you found in your answer.
+    6. Return your final answer as a message nicely formatted in Markdown.
+    
+Request: {user_message}
+""")
+        
+        # Structured prompt configuration
+        STRUCTURED_PROMPT_CONFIG: dict = {
+            "name": None,
+            "input_variables": ["agent_scratchpad", "input", "tool_names", "tools"],
+            "optional_variables": ["chat_history"],
+            "output_parser": None,
+            "partial_variables": {"chat_history": []},
+            "metadata": {
+                "lc_hub_owner": "naouufel",
+                "lc_hub_repo": "structured-chat-agent",
+            },
+            "tags": None,
+            "messages": [
+                {
+                    "prompt": {
+                        "template": """Respond to the human as helpfully and accurately as possible. You have access to the following tools:
 
+{tools}
+
+Use a json blob to specify a tool by providing an action key (tool name) and an action_input key (tool input).
+
+Valid "action" values: "Final Answer" or {tool_names}
+
+Provide only ONE action per $JSON_BLOB, as shown:
+
+```
+{
+  "action": $TOOL_NAME,
+  "action_input": $INPUT
+}
+```
+
+Follow this format:
+
+Question: input question to answer
+Thought: consider previous and subsequent steps
+Action:
+```
+$JSON_BLOB
+```
+Observation: action result
+... (repeat Thought/Action/Observation N times)
+Thought: I know what to respond
+Action:
+```
+{
+  "action": "Final Answer",
+  "action_input": "Final response to human"
+}
+```
+
+Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use tools if necessary. Respond directly if appropriate. Format is Action:```$JSON_BLOB```then Observation""",
+                        "input_variables": ["tool_names", "tools"],
+                        "template_format": "f-string",
+                    }
+                },
+                {
+                    "variable_name": "chat_history",
+                    "optional": True,
+                },
+                {
+                    "prompt": {
+                        "template": "{input}\n\n{agent_scratchpad}\n (reminder to respond in a JSON blob no matter what)",
+                        "input_variables": ["agent_scratchpad", "input"],
+                        "template_format": "f-string",
+                    }
+                }
+            ],
+            "validate_template": False,
+            "_type": "chat"
+        }
+
+        
     def __init__(self):
         print("Initializing Pipeline...")
         try:

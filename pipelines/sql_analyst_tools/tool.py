@@ -12,7 +12,6 @@ from langchain_core.callbacks import (
 from langchain_core.prompts import PromptTemplate
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_core.tools import BaseTool
-from pipelines.text_to_sql.prompt import QUERY_CHECKER
 
 
 class BaseSQLDatabaseTool(BaseModel):
@@ -104,10 +103,9 @@ class ListSQLDatabaseTool(BaseSQLDatabaseTool, BaseTool):
 
 
 class QuerySQLCheckerTool(BaseSQLDatabaseTool, BaseTool):
-    """Use an LLM to check if a query is correct.
-    Adapted from https://www.patterns.app/blog/2023/01/18/crunchbot-sql-analyst-gpt/"""
+    """Use an LLM to check if a query is correct."""
 
-    template: str = QUERY_CHECKER
+    valves: Any
     llm: BaseLanguageModel
     llm_chain: Any = Field(init=False)
     name: str = "sql_db_query_checker"
@@ -124,7 +122,8 @@ class QuerySQLCheckerTool(BaseSQLDatabaseTool, BaseTool):
             values["llm_chain"] = LLMChain(
                 llm=values.get("llm"),
                 prompt=PromptTemplate(
-                    template=QUERY_CHECKER, input_variables=["dialect", "query"]
+                    template=values["valves"].PROMPT_QUERY_CHECKER,
+                    input_variables=["dialect", "query"]
                 ),
             )
 

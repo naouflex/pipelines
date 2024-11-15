@@ -6,7 +6,7 @@ from langchain_core.pydantic_v1 import Field
 
 from langchain_community.agent_toolkits.base import BaseToolkit
 from langchain_community.tools import BaseTool
-from pipelines.text_to_sql.tool import (
+from pipelines.sql_analyst_tools.tool import (
     InfoSQLDatabaseTool,
     ListSQLDatabaseTool,
     QuerySQLCheckerTool,

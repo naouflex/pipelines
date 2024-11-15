@@ -11,9 +11,9 @@ import os
 from typing import List, Union, Generator, Iterator
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
-from pipelines.text_to_graphql.wrapper import GraphQLAPIWrapper
-from pipelines.text_to_graphql.base import create_graphql_agent
-from pipelines.text_to_graphql.toolkit import GraphQLDatabaseToolkit
+from pipelines.graphql_analyst_tools.wrapper import GraphQLAPIWrapper
+from pipelines.graphql_analyst_tools.base import create_graphql_agent
+from pipelines.graphql_analyst_tools.toolkit import GraphQLDatabaseToolkit
 
 class Pipeline:
     """GraphQL query pipeline"""
@@ -23,6 +23,39 @@ class Pipeline:
         GRAPHQL_ENDPOINT: str = os.getenv("GRAPHQL_ENDPOINT", "https://api.example.com/graphql")
         OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "your-openai-api-key-here")
         MODEL: str = os.getenv("MODEL", "gpt-4-turbo")
+        
+        # Add GraphQL prompts
+        PROMPT_GRAPHQL_PREFIX: str = """You are an agent designed to interact with a GraphQL API.
+        Given an input question, create a syntactically correct GraphQL query. First, understand the schema of the GraphQL API to determine what queries you can make. Use introspection if necessary. Then, construct the query and fetch the required data.
+        Unless the user specifies otherwise, limit your query to retrieve only the most relevant data. Avoid over-fetching or under-fetching.
+        You have access to tools for interacting with the GraphQL API.
+        Only use the below tools. Rely solely on the information returned by these tools to construct your final answer.
+        You MUST validate your query for correct syntax and feasibility before executing it.
+
+        DO NOT make any mutations or operations that might alter the data (like INSERT, UPDATE, DELETE).
+
+        If the question does not seem related to the GraphQL API, respond with 'I don't know' as the answer."""
+
+        PROMPT_GRAPHQL_SUFFIX: str = """Begin!
+
+        Question: {input}
+        Thought: I need to understand the GraphQL schema to decide what to query. Then, I'll create a GraphQL query that is specific and efficient, requesting only the necessary data fields.
+        {agent_scratchpad}"""
+
+        PROMPT_GRAPHQL_FUNCTIONS_SUFFIX: str = """I need to understand the GraphQL schema to decide what to query. Then, I'll craft a specific and efficient GraphQL query, requesting only the necessary data fields."""
+
+        PROMPT_GRAPHQL_QUERY_CHECKER: str = """{query}
+        Double check the {dialect} query above for common mistakes, including:
+        - Filtering on columns and not on 'id'
+        - Data type mismatch in predicates
+        - Properly quoting identifiers
+        - Properly using available filters
+        - Backticks in the query
+
+        If there are any of the above mistakes, rewrite the query. If there are no mistakes, just reproduce the original query.
+        Output the final GraphQL query only.
+
+        GraphQL Query: """
 
     def __init__(self):
         self.name = "Inverse GraphQL Agent"
@@ -82,6 +115,7 @@ class Pipeline:
             agent_executor = create_graphql_agent(
                 llm=llm,
                 toolkit=toolkit,
+                valves=self.valves,
                 verbose=True,
                 agent_type="openai-functions",
                 max_iterations=10,
