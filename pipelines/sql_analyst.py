@@ -163,7 +163,7 @@ SQL Query: """
         toolkit = SQLDatabaseToolkit(
             db=db, 
             llm=llm,
-            valves=self.valves
+            valves=self.valves  # Add valves parameter here
         )
         agent_executor = create_sql_agent(
             llm=llm,
