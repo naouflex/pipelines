@@ -1,5 +1,5 @@
 """Toolkit for interacting with an SQL database."""
-from typing import List
+from typing import Any, List
 
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.pydantic_v1 import Field
@@ -20,6 +20,7 @@ class SQLDatabaseToolkit(BaseToolkit):
 
     db: SQLDatabase = Field(exclude=True)
     llm: BaseLanguageModel = Field(exclude=True)
+    valves: Any = Field(exclude=True)  # Add valves field
 
     @property
     def dialect(self) -> str:
@@ -62,7 +63,10 @@ class SQLDatabaseToolkit(BaseToolkit):
             f"{query_sql_database_tool.name}!"
         )
         query_sql_checker_tool = QuerySQLCheckerTool(
-            db=self.db, llm=self.llm, description=query_sql_checker_tool_description
+            db=self.db,
+            llm=self.llm,
+            valves=self.valves,
+            description=query_sql_checker_tool_description
         )
         return [
             query_sql_database_tool,

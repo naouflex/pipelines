@@ -27,6 +27,8 @@ class Pipeline:
         OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "your-openai-api-key-here")
         MODEL: str = os.getenv("MODEL", "gpt-4-turbo")
         HEADLESS: bool = os.getenv("HEADLESS", "true").lower() == "true"
+        MAX_EXECUTION_TIME: int = int(os.getenv("MAX_EXECUTION_TIME", "180"))
+        MAX_ITERATIONS: int = int(os.getenv("MAX_ITERATIONS", "50"))
         PROMPT_REQUEST: str = os.getenv("PROMPT_REQUEST", """
 Instructions:
     0. If the request is not clear, return and ask the user for clarification, otherwise go to step 1.
@@ -218,8 +220,8 @@ Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use
                     tools=tools,
                     verbose=True,
                     handle_parsing_errors=True,
-                    max_execution_time=180,
-                    max_iterations=50,
+                    max_execution_time=self.valves.MAX_EXECUTION_TIME,
+                    max_iterations=self.valves.MAX_ITERATIONS,
                 )
                 
                 prompt_request = self.valves.PROMPT_REQUEST.format(user_message=user_message)

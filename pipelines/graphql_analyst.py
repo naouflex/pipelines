@@ -111,7 +111,11 @@ class Pipeline:
                 streaming=True
             )
             
-            toolkit = GraphQLDatabaseToolkit(graphql_wrapper=self.wrapper, llm=llm)
+            toolkit = GraphQLDatabaseToolkit(
+                graphql_wrapper=self.wrapper,
+                llm=llm,
+                valves=self.valves
+            )
             agent_executor = create_graphql_agent(
                 llm=llm,
                 toolkit=toolkit,

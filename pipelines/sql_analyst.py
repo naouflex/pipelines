@@ -8,13 +8,14 @@ requirements: langchain-openai,sqlalchemy,psycopg2-binary
 """
 
 import os
-from typing import List, Union, Generator, Iterator
-from pydantic import BaseModel
+from typing import List, Union, Generator, Iterator, Optional, Callable, Awaitable
+from pydantic import BaseModel, Field
 from sqlalchemy import create_engine
 from langchain_openai import ChatOpenAI
 from langchain_community.utilities import SQLDatabase
 from pipelines.sql_analyst_tools.base import create_sql_agent
 from pipelines.sql_analyst_tools.toolkit import SQLDatabaseToolkit
+import time
 
 
 class Pipeline:
@@ -22,6 +23,12 @@ class Pipeline:
         DB_CONNECTION_STRING: str = "postgresql://user:pass@localhost:5432/db"
         OPENAI_API_KEY: str = ""
         MODEL: str = "gpt-4-turbo"
+        emit_interval: float = Field(
+            default=2.0, description="Interval in seconds between status emissions"
+        )
+        enable_status_indicator: bool = Field(
+            default=True, description="Enable or disable status indicator emissions"
+        )
 
         # SQL Prompts
         PROMPT_SQL_PREFIX: str = """You are an agent designed to interact with a SQL database.
@@ -75,6 +82,7 @@ SQL Query: """
             }
         )
         self.init_db_connection()
+        self.last_emit_time = 0
 
     def init_db_connection(self):
         self.engine = create_engine(self.valves.DB_CONNECTION_STRING)
@@ -91,9 +99,47 @@ SQL Query: """
         if self.engine:
             self.engine.dispose()
 
-    def pipe(
-        self, user_message: str, model_id: str, messages: List[dict], body: dict
-    ) -> Union[str, Generator, Iterator]:
+    async def emit_status(
+        self,
+        __event_emitter__: Callable[[dict], Awaitable[None]],
+        level: str,
+        message: str,
+        done: bool,
+    ):
+        current_time = time.time()
+        if (
+            __event_emitter__
+            and self.valves.enable_status_indicator
+            and (
+                current_time - self.last_emit_time >= self.valves.emit_interval or done
+            )
+        ):
+            await __event_emitter__(
+                {
+                    "type": "status",
+                    "data": {
+                        "status": "complete" if done else "in_progress",
+                        "level": level,
+                        "description": message,
+                        "done": done,
+                    },
+                }
+            )
+            self.last_emit_time = current_time
+
+    async def pipe(
+        self,
+        body: dict,
+        __user__: Optional[dict] = None,
+        __event_emitter__: Callable[[dict], Awaitable[None]] = None,
+        __event_call__: Callable[[dict], Awaitable[dict]] = None,
+    ) -> Optional[dict]:
+        await self.emit_status(__event_emitter__, "info", "Initializing SQL Agent", False)
+        
+        user_message = body.get("messages", [])[-1]["content"]
+        model_id = body.get("model", self.valves.MODEL)
+        messages = body.get("messages", [])
+
         # Add debug prints like in OpenAI pipeline
         print(f"pipe:{__name__}")
         print(messages)
@@ -114,7 +160,11 @@ SQL Query: """
 
         db = SQLDatabase(self.engine)
 
-        toolkit = SQLDatabaseToolkit(db=db, llm=llm)
+        toolkit = SQLDatabaseToolkit(
+            db=db, 
+            llm=llm,
+            valves=self.valves
+        )
         agent_executor = create_sql_agent(
             llm=llm,
             toolkit=toolkit,
@@ -127,6 +177,7 @@ SQL Query: """
 
         try:
             if body.get("stream", False):
+                await self.emit_status(__event_emitter__, "info", "Processing streaming query", False)
                 # Collect the complete response first
                 response_chunks = []
                 for chunk in agent_executor.stream({"input": user_message}):
@@ -154,12 +205,17 @@ SQL Query: """
                 else:
                     yield "No valid response generated. Please try rephrasing your question."
             else:
+                await self.emit_status(__event_emitter__, "info", "Processing single query", False)
                 response = agent_executor.invoke(
                     {"input": user_message},
                     {"return_only_outputs": True}
                 )
-                return self._process_response(str(response.get("output", "")))
+                processed_response = self._process_response(str(response.get("output", "")))
+                
+            await self.emit_status(__event_emitter__, "info", "Query complete", True)
+            return processed_response
         except Exception as e:
+            await self.emit_status(__event_emitter__, "error", f"Error executing query: {str(e)}", True)
             return f"Error executing query: {str(e)}"
 
     def _process_response(self, response: str) -> str:

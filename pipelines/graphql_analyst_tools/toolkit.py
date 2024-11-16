@@ -5,7 +5,7 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.pydantic_v1 import Field
 
 from langchain_community.agent_toolkits.base import BaseToolkit
-from typing import List
+from typing import List, Any
 
 from pipelines.graphql_analyst_tools.tool import (
     GraphQLCheckerTool,
@@ -28,6 +28,7 @@ class GraphQLDatabaseToolkit(BaseToolkit):
 
     graphql_wrapper: GraphQLAPIWrapper = Field(exclude=True)
     llm: BaseLanguageModel = Field(exclude=True)
+    valves: Any = Field(exclude=True)
 
     @property
     def dialect(self) -> str:
@@ -37,7 +38,7 @@ class GraphQLDatabaseToolkit(BaseToolkit):
         """Get the tools in the toolkit."""
         return  [
         SchemaGraphQLTool(graphql_wrapper=self.graphql_wrapper),
-        GraphQLCheckerTool(graphql_wrapper=self.graphql_wrapper,llm=self.llm),
+        GraphQLCheckerTool(graphql_wrapper=self.graphql_wrapper,llm=self.llm, valves=self.valves),
         QueryGraphQLTool(graphql_wrapper=self.graphql_wrapper),
         OutputFormatTool(graphql_wrapper=self.graphql_wrapper,llm=self.llm),
         TimestampConverterTool(graphql_wrapper=self.graphql_wrapper),
