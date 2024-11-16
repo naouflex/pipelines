@@ -18,9 +18,9 @@ class Pipeline:
         IMAGE_SIZE: str = "1792x1024"
         NUM_IMAGES: int = 1
         PROMPT_MODEL: str = "gpt-4-turbo"  # Model to use for prompt generation
-        SYSTEM_PROMPT: str = """You are an expert at writing prompts for DALL-E image generation. 
-            Convert the user's request and conversation context into a detailed, vivid prompt that will produce the best possible image.
-            Focus on visual details, style, lighting, and composition. Return only the prompt text, without any explanations."""
+        SYSTEM_PROMPT: str = """You are an expert at writing prompts for DALL-E image generation. Receving a prompt and sometimes context.
+            If there is context incorporate it in the image description. Make sure to include all details and to modify the request as little as possible to be consistent  to the original request.
+            Return only the prompt text, without any explanations."""
 
     def __init__(self):
         self.type = "manifold"
