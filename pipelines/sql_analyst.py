@@ -91,7 +91,7 @@ SQL Query: """
     MAX_ITERATIONS: int = 10
 
     def __init__(self):
-        self.name = "Inverse Stats DB Agent"
+        self.name = "analytics_sql"
         self.engine = None
         self.nlsql_response = ""
         self.valves = self.Valves()
