@@ -30,21 +30,21 @@ class Pipeline:
         MODEL: str = os.getenv("MODEL", "gpt-4-turbo")
         HEADLESS: bool = os.getenv("HEADLESS", "true").lower() == "true"
         PROMPT_REQUEST: str = os.getenv("PROMPT_REQUEST", """
-            Instructions: Produce a weekly article following those instructions\
-                1. Go to https://app.inverse.watch/public/dashboards/iVI1ZdCMMTOg2SwSWOpIKQGOfojXGQd8QDeisa25?org_slug=default&p_week={week} and wait 10 seconds for the page to load \
-                2. Use extract_text tool to extract the data from the page.\
-                5. Get examples of articles at https://inverse.watch/weekly-2024-w44 and https://inverse.watch/weekly-2024-w45
-                6. Use extract_text tool to extract the data from the page and identify the sections and formats in those articles
-                7. Produce a summary for week {week} with the data you extracted in step 2 and 4.\
-                8. Make sure to adhere to the sections and format of the articles.
-                9. Return your final answer as a message nicely formatted in Markdown.\
+            Instructions: Produce a weekly article following those instructions.
+                1. Go to https://app.inverse.watch/public/dashboards/iVI1ZdCMMTOg2SwSWOpIKQGOfojXGQd8QDeisa25?org_slug=default&p_week={week} and wait 10 seconds for the page to load.
+                2. Use extract_text tool to extract the data from the page.
+                3. Get examples of article at https://inverse.watch/weekly-2024-w45
+                4. Use extract_text tool to extract the data from the page 
+                5. Identify the hierarchy of sections and formats used in those articles
+                6. Produce an article for week {week} with the data you extracted in step 2 and 4.
+                7. Make sure to adhere to the sections and format of the articles.
+                8. Return your final answer as a message nicely formatted in Markdown.
             """)
 
     def __init__(self):
         print("Initializing Pipeline...")
         try:
-            self.type = "manifold"
-            self.name = "Inverse Weekly: Weekly Summary Generator"
+            self.name = "Weekly Analyst"
             self.browser = None
             self.toolkit = None
             self.valves = self.Valves()
@@ -55,23 +55,11 @@ class Pipeline:
                 api_key=self.valves.OPENAI_API_KEY,
                 streaming=True
             )
-            self.pipelines = self.get_openai_assistants()
             print("Pipeline initialization complete")
         except Exception as e:
             print(f"Error in Pipeline initialization: {str(e)}")
             print(traceback.format_exc())
             raise
-
-    def get_openai_assistants(self) -> List[dict]:
-        """Get the available GPT models
-
-        Returns:
-            List[dict]: The list of GPT models
-        """
-        return [
-            {"id": "gpt-4-turbo", "name": "GPT-4 Turbo"},
-            {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo"},
-        ]
 
     async def init_browser(self, force_new=False):
         """Initialize the browser and toolkit"""
@@ -113,7 +101,6 @@ class Pipeline:
             api_key=self.valves.OPENAI_API_KEY,
             streaming=True
         )
-        self.pipelines = self.get_openai_assistants()
 
     async def _execute_agent(self, agent_executor, prompt_request):
         """Execute agent with proper async handling"""

@@ -118,8 +118,7 @@ Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use
     def __init__(self):
         print("Initializing Pipeline...")
         try:
-            self.type = "manifold"
-            self.name = "Web Browser Agent"
+            self.name = "Web Analyst"
             self.browser = None
             self.toolkit = None
             self.valves = self.Valves()
@@ -130,19 +129,11 @@ Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use
                 api_key=self.valves.OPENAI_API_KEY,
                 streaming=True
             )
-            self.pipelines = self.get_openai_assistants()
             print("Pipeline initialization complete")
         except Exception as e:
             print(f"Error in Pipeline initialization: {str(e)}")
             print(traceback.format_exc())
             raise
-
-    def get_openai_assistants(self) -> List[dict]:
-        """Get the available GPT models"""
-        return [
-            {"id": "gpt-4-turbo", "name": "GPT-4 Turbo"},
-            {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo"},
-        ]
 
     async def on_startup(self):
         """This function is called when the server is started."""
@@ -163,7 +154,6 @@ Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use
             api_key=self.valves.OPENAI_API_KEY,
             streaming=True
         )
-        self.pipelines = self.get_openai_assistants()
 
     def _process_response(self, response: str) -> str:
         """Process and clean the response."""

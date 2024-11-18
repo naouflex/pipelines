@@ -58,7 +58,7 @@ class Pipeline:
         GraphQL Query: """
 
     def __init__(self):
-        self.name = "analytics_graphql"
+        self.name = "GraphQL Analyst"
         self.wrapper = None
         self.valves = self.Valves()
         
