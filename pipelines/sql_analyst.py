@@ -19,10 +19,15 @@ import time
 
 
 class Pipeline:
+    """SQL query pipeline"""
+
     class Valves(BaseModel):
-        DB_CONNECTION_STRING: str = "postgresql://user:pass@localhost:5432/db"
-        OPENAI_API_KEY: str = ""
-        MODEL: str = "gpt-4-turbo"
+        """Options to change from the WebUI"""
+        DB_CONNECTION_STRING: str = Field(default=os.getenv("DB_CONNECTION_STRING", "postgresql://user:pass@localhost:5432/db"), description="Database connection string")
+        OPENAI_API_KEY: str = Field(default=os.getenv("OPENAI_API_KEY", "your-openai-api-key-here"), description="OpenAI API key")
+        MODEL: str = Field(default=os.getenv("MODEL", "gpt-4-turbo"), description="OpenAI model to use")
+        
+        # Status emission settings
         emit_interval: float = Field(
             default=2.0, description="Interval in seconds between status emissions"
         )
@@ -68,36 +73,54 @@ If there are any of the above mistakes, rewrite the query. If there are no mista
 Output the final SQL query only.
 
 SQL Query: """
+
+        # Add new configurable parameters
+        top_k: int = Field(
+            default=10, 
+            description="Maximum number of results to return in queries"
+        )
+        temperature: float = Field(
+            default=0.1,
+            description="Temperature for the LLM responses"
+        )
+        dialect: str = Field(
+            default="postgresql",
+            description="SQL dialect being used"
+        )
+
     MAX_ITERATIONS: int = 10
 
     def __init__(self):
         self.name = "Inverse Stats DB Agent"
         self.engine = None
         self.nlsql_response = ""
-        self.valves = self.Valves(
-            **{
-                "DB_CONNECTION_STRING": os.getenv("DB_CONNECTION_STRING", "postgresql://user:pass@localhost:5432/db"),
-                "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", "your-openai-api-key-here"),
-                "MODEL": os.getenv("MODEL", "gpt-4-turbo"),
-            }
-        )
-        self.init_db_connection()
+        self.valves = self.Valves()
         self.last_emit_time = 0
 
-    def init_db_connection(self):
-        self.engine = create_engine(self.valves.DB_CONNECTION_STRING)
-        return self.engine
+    async def init_db_connection(self):
+        """Initialize the database connection"""
+        try:
+            self.engine = create_engine(self.valves.DB_CONNECTION_STRING)
+            return True
+        except Exception as e:
+            print(f"Error initializing database connection: {e}")
+            return False
 
     async def on_startup(self):
         """This function is called when the server is started."""
         print(f"on_startup:{__name__}")
-        self.init_db_connection()
+        await self.init_db_connection()
 
     async def on_shutdown(self):
         """This function is called when the server is stopped."""
         print(f"on_shutdown:{__name__}")
         if self.engine:
             self.engine.dispose()
+
+    async def on_valves_updated(self):
+        """This function is called when the valves are updated."""
+        print(f"on_valves_updated:{__name__}")
+        await self.init_db_connection()
 
     async def emit_status(
         self,
@@ -127,20 +150,9 @@ SQL Query: """
             )
             self.last_emit_time = current_time
 
-    async def pipe(
-        self,
-        body: dict,
-        __user__: Optional[dict] = None,
-        __event_emitter__: Callable[[dict], Awaitable[None]] = None,
-        __event_call__: Callable[[dict], Awaitable[dict]] = None,
-    ) -> Optional[dict]:
-        await self.emit_status(__event_emitter__, "info", "Initializing SQL Agent", False)
-        
-        user_message = body.get("messages", [])[-1]["content"]
-        model_id = body.get("model", self.valves.MODEL)
-        messages = body.get("messages", [])
-
-        # Add debug prints like in OpenAI pipeline
+    def pipe(
+        self, user_message: str, model_id: str, messages: List[dict], body: dict
+    ) -> Union[str, Generator, Iterator]:
         print(f"pipe:{__name__}")
         print(messages)
         print(user_message)
@@ -148,47 +160,40 @@ SQL Query: """
         # Check for special message types that don't need SQL
         if body.get("title", False):
             print("Title Generation")
-            return "INV Price Checker"
-
-        # Only create SQL agent for actual database queries
-        llm = ChatOpenAI(
-            temperature=0.1,
-            model=self.valves.MODEL,
-            openai_api_key=self.valves.OPENAI_API_KEY,
-            streaming=True
-        )
-
-        db = SQLDatabase(self.engine)
-
-        toolkit = SQLDatabaseToolkit(
-            db=db, 
-            llm=llm,
-            valves=self.valves  # Add valves parameter here
-        )
-        agent_executor = create_sql_agent(
-            llm=llm,
-            toolkit=toolkit,
-            valves=self.valves,
-            verbose=True,
-            agent_type="openai-functions",
-            max_iterations=self.MAX_ITERATIONS,
-            handle_parsing_errors=True
-        )
+            return "SQL Query Generator"
 
         try:
+            # Create SQL agent for actual queries
+            llm = ChatOpenAI(
+                temperature=self.valves.temperature,
+                model=self.valves.MODEL,
+                openai_api_key=self.valves.OPENAI_API_KEY,
+                streaming=True
+            )
+            
+            db = SQLDatabase(self.engine)
+
+            toolkit = SQLDatabaseToolkit(
+                db=db, 
+                llm=llm,
+                valves=self.valves  # Add valves parameter here
+            )
+            agent_executor = create_sql_agent(
+                llm=llm,
+                toolkit=toolkit,
+                valves=self.valves,
+                verbose=True,
+                agent_type="openai-functions",
+                max_iterations=self.MAX_ITERATIONS,
+                handle_parsing_errors=True
+            )
+
             if body.get("stream", False):
-                await self.emit_status(__event_emitter__, "info", "Processing streaming query", False)
-                # Collect the complete response first
+                # Handle streaming response
                 response_chunks = []
                 for chunk in agent_executor.stream({"input": user_message}):
                     if isinstance(chunk, dict):
-                        # Collect all relevant parts of the response
-                        if "intermediate_steps" in chunk:
-                            for step in chunk["intermediate_steps"]:
-                                if isinstance(step, tuple) and len(step) == 2:
-                                    action, output = step
-                                    if output and str(output) != "None":
-                                        response_chunks.append(str(output))
+                        # Similar chunk handling as graphql_analyst
                         if "output" in chunk and chunk["output"]:
                             response_chunks.append(str(chunk["output"]))
                         if "content" in chunk and chunk["content"]:
@@ -205,17 +210,13 @@ SQL Query: """
                 else:
                     yield "No valid response generated. Please try rephrasing your question."
             else:
-                await self.emit_status(__event_emitter__, "info", "Processing single query", False)
+                # Handle non-streaming response
                 response = agent_executor.invoke(
                     {"input": user_message},
                     {"return_only_outputs": True}
                 )
-                processed_response = self._process_response(str(response.get("output", "")))
-                
-            await self.emit_status(__event_emitter__, "info", "Query complete", True)
-            return processed_response
+                return self._process_response(str(response.get("output", "")))
         except Exception as e:
-            await self.emit_status(__event_emitter__, "error", f"Error executing query: {str(e)}", True)
             return f"Error executing query: {str(e)}"
 
     def _process_response(self, response: str) -> str:
